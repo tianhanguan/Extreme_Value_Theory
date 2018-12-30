@@ -1,0 +1,105 @@
+##Fit a Gumbel copula to the exceeses over thresholds datasets
+#Density function for GPD 
+dGPD = function(x,shape,scale) {
+	den = NULL	
+	for (i in 1:length(x)) {
+		k = max(0,1+shape*x[i]/scale)
+		if (shape == 0) {
+			gpdden = 1/scale*exp(-y[i]/scale)
+		}
+		else {
+			gpdden = 1/scale*(k^(-(1+1/shape)))
+		}
+		den = c(den,gpdden)
+	}
+	return(den)
+}
+
+#Distribution function for GPD 
+pGPD = function(y,shape,scale) {
+	cdf = NULL	
+	for (i in 1:length(y)) {
+		k = max(0,1+shape*y[i]/scale)
+		if (shape == 0) {
+			gpdcdf = 1-exp(-y[i]/scale)
+		}
+		else {
+			gpdcdf = 1-k^(-1/shape)
+		}
+		cdf = c(cdf,gpdcdf)
+	}
+	return(cdf)
+}
+
+#Quantile function for GPD 
+qGPD = function(q,shape,scale) {
+	qt = NULL	
+	for (i in 1:length(q)) {
+		if (shape == 0) {
+			gpdinv = -scale*(log(1-q[i]))
+		}
+		else {
+			gpdinv = scale*((1-q[i])^(-shape)-1)/shape
+		}
+		qt = c(qt,gpdinv)
+	}
+	return(qt)
+}
+
+#Random generation function for GPD
+rGPD = function(n,shape,scale) {
+	sim = NULL	
+	for (i in 1:n) {
+		u = runif(1)
+		if (shape == 0) {
+			gpdinv = -scale*(log(1-u))
+		}
+		else {
+			gpdinv = scale*((1-u)^(-shape)-1)/shape
+		}
+		sim = c(sim,gpdinv)
+	}
+	return(sim)
+}	
+##################################################################################
+##################################################################################
+model1 = gpd.fit(payments1,0)
+model2 = gpd.fit(payments2,400)
+model3 = gpd.fit(payments3,600)
+
+#Obtain marginal GPD model parameters
+theta1 = c(model1$mle[2],model1$mle[1])
+theta2 = c(model2$mle[2],model2$mle[1])
+theta3 = c(model3$mle[2],model3$mle[1])
+
+#Step 1
+m1 = pGPD(payments[,1],theta1[1],theta1[2])
+m2 = pGPD(payments[,2],theta2[1],theta2[2])
+m3 = pGPD(payments[,3],theta3[1],theta3[2])
+m = cbind(m1,m2,m3)
+
+#Step 2
+cop_model = gumbelCopula(dim=3)
+
+#Step 3
+fit = fitCopula(cop_model,m,method='ml')
+theta = coef(fit)
+###################################################################
+#Estimate multivariate return levels
+myCop = gumbelCopula(dim=3, param=theta)
+myMvd <- mvdc(copula=myCop, margins=c("GPD", "GPD", "GPD"),
+              paramMargins=list(list(shape=theta1[1], scale=theta1[2]),
+                                list(shape=theta2[1], scale=theta2[2]), 
+                                list(shape=theta3[1], scale=theta3[2])) )
+datasim = rMvdc(50000,myMvd)
+payamt = rowSums(datasim)
+
+#Estimate return levels
+quantile(payamt,1-1/1000)
+quantile(payamt,1-1/2000)
+quantile(payamt,1-1/5000)
+
+#Actual multivariate return levels
+payamt2 = rowSums(payments2)
+a = c(0.5,0.75,0.9,0.95,0.99,0.999)
+quantile(payamt2,a)

@@ -1,0 +1,166 @@
+#Construct a user-defined Mean Excess Plot (also called the Mean Residual Life Plot)
+MEplot = function(dat,upper,step) {
+	x = NULL
+	u = seq(0,upper,step)
+	for (i in 1:length(u)) {
+		exceedance = dat[dat>u[i]]
+		x[i] = mean(exceedance-u[i])
+	}
+	plot(x~u,type='l',main='Mean Excess Plot for Z',xlab='Threshold',ylab='Mean Excess')
+}
+
+par(mfrow=c(1,2))
+MEplot(Z,max(Z),100)
+MEplot(Z,1200,1)
+u1 = 800
+Xabove = X[X>u1]
+Xexceed = Xabove-u1
+number1 = length(Xexceed)
+
+u2 = 700
+Yabove = Y[Y>u2]
+Yexceed = Yabove-u2
+number2 = length(Yexceed)
+
+u3 = 400
+Zabove = Z[Z>u3]
+Zexceed = Zabove-u3
+number3 = length(Zexceed)
+
+#Pairwise plots (to show the extreme dependency)
+windows()
+par(mfrow=c(2,2))
+plot(Y~X)
+abline(h=u2,v=u1)
+
+plot(Z~X)
+abline(h=u3,v=u1)
+
+plot(Z~Y)
+abline(h=u3,v=u2)
+###########################################################################
+##Fit a Generalized Pareto Distribution (GPD) to the conditional excess using Maximum Likelihood
+#Step 1: Write a function to calculate the negative log-likelihood (NLogL) 
+gpd.nll = function(theta) {
+	shape = theta[1]
+	scale = theta[2]
+	k = min(1+shape*y/scale)
+	n = length(y)
+	nll = NULL
+
+	if ((k < 10e-6) || (scale < 0)) {
+		nll = -1e10
+	}
+	else if (scale == 0) {
+		nll = n*log(scale)+sum(y)/scale
+	}
+	else {
+		nll = n*log(scale)+(1/shape+1)*sum(log(1+shape*y/scale))
+	}
+	
+	return(nll)
+}
+
+#Step 2: Initialize some starting value for the parameters
+shape = 0.5
+scale = 100
+theta = c(shape,scale)
+y = Zexceed
+
+#Step 3: Use the Newton's method to find the parameters that minimize the NLogL
+model = nlm(gpd.nll,theta,hessian=TRUE)
+
+#Step 4: Obtain the standard errors for the parameter estimates
+varcov = solve(model$hessian)
+se = sqrt(diag(varcov))
+
+#Use the ISMEV package to check
+model1 = gpd.fit(X,u1)
+model2 = gpd.fit(Y,u2)
+model3 = gpd.fit(Z,u3)
+##############################################################
+#PP plot
+#Distribution function a GPD
+gpd_cdf = function(y,theta) {
+	shape = theta[1]
+	scale = theta[2]
+	k = max(0,1+shape*y/scale)
+	if (shape == 0) {
+		gpd = 1-exp(-y/scale)
+	}
+	else {
+		gpd = 1-k^(-1/shape)
+	}
+	return(gpd)
+}
+	
+#Plot the PP plot
+pp_plot = function(y,theta) {	
+	ordery = sort(y)
+	empcdf = NULL
+	gpdcdf = NULL
+	for (i in 1:length(y)) {
+		empcdf[i] = i/(length(y)+1)
+		gpdcdf[i] = gpd_cdf(ordery [i],theta)
+	}
+	plot(empcdf~gpdcdf,main="PP plot",xlab="GPD cumulative distribution",ylab="Empirical cumulative distribution")
+	abline(0,1)
+}
+
+#QQ plot
+#Inverse of the distribution function of a GPD
+gpd_inv = function(q,theta) {
+	shape = theta[1]
+	scale = theta[2]
+	if (shape == 0) {
+		gpdinv = -scale*(log(1-q))
+	}
+	else {
+		gpdinv = scale*((1-q)^(-shape)-1)/shape
+	}
+	return(gpdinv)
+}
+
+#Plot a QQ plot
+qq_plot = function(y,theta) {	
+	ordery = sort(y)
+	empcdf = NULL
+	gpdinv = NULL
+	for (i in 1:length(y)) {
+		empcdf[i] = i/(length(y)+1)
+		gpdinv[i] = gpd_inv(empcdf[i],theta)
+	}
+	plot(ordery~gpdinv,main="QQ plot",xlab="GPD quantile",ylab="Ordered data")
+	abline(0,1)
+}
+
+#Use the ISMEV package to check
+model = gpd.fit(Z,u3)
+
+theta = c(model$mle[2],model$mle[1])
+par(mfrow=c(1,2))
+pp_plot(Zexceed,theta)
+qq_plot(Zexceed,theta)
+
+#use the ismev package
+windows()
+gpd.diag(model)
+############################################################################
+#Use the model to find different return levels
+zt = function(u,theta,rate,t) {
+	shape = theta[1]
+	scale = theta[2]
+	if (shape == 0) {
+		return(u+scale*log(t*rate)) 
+	}
+	else {
+		return(u+scale/shape*((t*rate)^shape-1))
+	}
+}
+
+model = gpd.fit(Z,u3)
+zt(u1,c(model$mle[2],model$mle[1]),model$rate,t=5000)
+
+
+	
+

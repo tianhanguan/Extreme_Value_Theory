@@ -1,0 +1,87 @@
+############################################################################################
+#Import libraries
+library(actuar)
+library(copula)
+library(ismev)
+library(moments)
+
+##Training dataset 
+#Use a t-copula to simulate a correlated high-dimensional heavy-tailed dataset[with significant positive 
+#tail dependence]
+set.seed(12345)
+mycop <- tCopula(param=0.75, dim=3, dispstr = "ex", df = 2)
+
+myMvd <- mvdc(copula=mycop, margins=c("pareto", "burr", "lnorm"),
+              paramMargins=list(list(shape=2.5, scale=100),
+                                list(shape1=1, shape2=3.5, scale = 150), 
+                                list(meanlog = 2, sdlog = 1.5)) )
+
+data <- rMvdc(n=100000,mvdc=myMvd)
+colnames(data) <- c("X", "Y", "Z")
+
+#extract each dimension's data
+X = data[,1]
+Y = data[,2]
+Z = data[,3]
+
+#visualize extremal dependence
+par(mfrow=c(1,3))
+plot(X,Y)
+plot(X,Z)
+plot(Y,Z)
+###############################################################################
+##Testing dataset 
+#Use a t-copula to simulate a correlated high-dimensional heavy-tailed dataset[with significant positive 
+#tail dependence]
+set.seed(54321)
+mycop <- tCopula(param=0.75, dim=3, dispstr = "ex", df = 2)
+
+myMvd <- mvdc(copula=mycop, margins=c("pareto", "burr", "lnorm"),
+              paramMargins=list(list(shape=2.5, scale=100),
+                                list(shape1=1, shape2=3.5, scale = 150), 
+                                list(meanlog = 2, sdlog = 1.5)) )
+
+data2 <- rMvdc(n=100000,mvdc=myMvd)
+colnames(data) <- c("X2", "Y2", "Z2")
+
+#extract each dimension's data
+X2 = data2[,1]
+Y2 = data2[,2]
+Z2 = data2[,3]
+################################################################################
+################################################################################
+#Multivariate Case:
+#Get the multivariate extremes dataset
+selection <- function(dat,u1,u2,u3) {
+	dataa = NULL
+	for (i in 1:dim(dat)[1]) {
+		if ((dat[i,][1]>u1) && (dat[i,][2]>u2) && (dat[i,][3]>u3)) {
+			dataa = rbind(dataa,dat[i,])
+		}
+	}
+	dataa
+}
+
+#For the Training dataset
+#Filter 1
+extremes = selection(data,800,700,400) #multivariate extremes
+
+#Filtler 2
+u1 = 800
+u2 = 700
+u3 = 400
+payments1 = extremes[,1]-u1
+payments2 = extremes[,2]-u2
+payments3 = extremes[,3]-u3
+payments = cbind(payments1,payments2,payments3) #joint payments
+
+
+#For the Testing dataset
+#Filter 1
+extremes2 = selection(data2,800,700,400) #multivariate extremes
+
+#Filtler 2
+payments21 = extremes2[,1]-u1
+payments22 = extremes2[,2]-u2
+payments23 = extremes2[,3]-u3
+payments2 = cbind(payments21,payments22,payments23) #joint payments

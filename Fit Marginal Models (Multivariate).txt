@@ -1,0 +1,104 @@
+###########################################################################
+##Fit a Generalized Pareto Distribution (GPD) to the conditional excess using Maximum Likelihood
+#Step 1: Write a function to calculate the negative log-likelihood (NLogL) 
+gpd.nll = function(theta) {
+	shape = theta[1]
+	scale = theta[2]
+	k = min(1+shape*y/scale)
+	n = length(y)
+	nll = NULL
+
+	if ((k < 10e-6) || (scale < 0)) {
+		nll = -1e10
+	}
+	else if (scale == 0) {
+		nll = n*log(scale)+sum(y)/scale
+	}
+	else {
+		nll = n*log(scale)+(1/shape+1)*sum(log(1+shape*y/scale))
+	}
+	
+	return(nll)
+}
+
+#Step 2: Initialize some starting value for the parameters
+shape = 0.45
+scale = 500
+theta = c(shape,scale)
+y = payments1
+
+#Step 3: Use the Newton's method to find the parameters that minimize the NLogL
+model = nlm(gpd.nll,theta,hessian=TRUE)
+
+#Step 4: Obtain the standard errors for the parameter estimates
+varcov = solve(model$hessian)
+se = sqrt(diag(varcov))
+
+#Use the ISMEV package to check
+model = gpd.fit(payments3,600)
+##############################################################
+#PP plot
+gpd_cdf = function(y,theta) {
+	shape = theta[1]
+	scale = theta[2]
+	k = max(0,1+shape*y/scale)
+	if (shape == 0) {
+		gpd = 1-exp(-y/scale)
+	}
+	else {
+		gpd = 1-k^(-1/shape)
+	}
+	return(gpd)
+}
+	
+
+pp_plot = function(y,theta) {	
+	ordery = sort(y)
+	empcdf = NULL
+	gpdcdf = NULL
+	for (i in 1:length(y)) {
+		empcdf[i] = i/(length(y)+1)
+		gpdcdf[i] = gpd_cdf(ordery [i],theta)
+	}
+	plot(empcdf~gpdcdf,main="PP plot for dataset Z*",xlab="GPD cumulative distribution",ylab="Empirical cumulative distribution")
+	abline(0,1)
+}
+
+#QQ plot
+gpd_inv = function(q,theta) {
+	shape = theta[1]
+	scale = theta[2]
+	if (shape == 0) {
+		gpdinv = -scale*(log(1-q))
+	}
+	else {
+		gpdinv = scale*((1-q)^(-shape)-1)/shape
+	}
+	return(gpdinv)
+}
+
+qq_plot = function(y,theta) {	
+	ordery = sort(y)
+	empcdf = NULL
+	gpdinv = NULL
+	for (i in 1:length(y)) {
+		empcdf[i] = i/(length(y)+1)
+		gpdinv[i] = gpd_inv(empcdf[i],theta)
+	}
+	plot(ordery~gpdinv,main="QQ plot for dataset Z*",xlab="GPD quantile",ylab="Ordered data")
+	abline(0,1)
+}
+
+theta = c(model$mle[2],model$mle[1])
+par(mfrow=c(1,2))
+pp_plot(payments1,theta)
+qq_plot(payments1,theta)
+
+#use the ismev package
+windows()
+gpd.diag(model)
+############################################################################
+
+
+	
+
